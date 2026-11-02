@@ -82,13 +82,13 @@ static int64_t CodePointer(const Dis_t* d, uint32_t v)
 	return -1;
 }
 
-/* 1 when the instruction ends its flow: "14" jmp, "17" ret, "12" jmp_rel,
+/* 1 when the instruction ends its flow: "14" jmp, "17" ret, "13" jmp_rel,
  * or a system call the thread never returns from.  A conditional jump
  * falls through, so it does not. */
 static int EndsFlow(const AsmInsn_t* in)
 {
 	if(in->fam == 0)
-		return in->op == 0x14 || in->op == 0x17 || in->op == 0x12;
+		return in->op == 0x14 || in->op == 0x17 || in->op == 0x13;
 	if(in->fam == 0x80)
 		return in->op == 0x45 || in->op == 0x6a || in->op == 0x6b; // exit_thread, quit, reboot
 	return 0;
@@ -238,7 +238,9 @@ static void FindUnreferencedCode(Dis_t* d)
 				end++;
 			if(end - off >= 2 && !ClearlyData(d, off, end) && DecodesCleanly(d, off, end, &reached))
 			{
-				d->label[off] |= L_DEAD | (d->area[off] == 0x10 ? L_CALL : L_JUMP);
+				// a function starts by setting up its frame: "10" push_fp, or in the
+				// compact code of 1.667 on "12" add_fp; anything else is a jump target
+				d->label[off] |= L_DEAD | (d->area[off] == 0x10 || d->area[off] == 0x12 ? L_CALL : L_JUMP);
 				Push(d, off);
 				while(d->workCount)
 					Follow(d, d->work[--d->workCount]);
@@ -392,7 +394,9 @@ static void WriteCode(Dis_t* d, uint32_t off, const AsmInsn_t* in)
 	{ // the operand that is a target is printed as its label
 		Label(d, in->target, lbl, sizeof lbl);
 		Mnemonic(d, in, mn, sizeof mn);
-		if(in->fam == 0 && (in->op == 0x15 || in->op == 0x3b) && in->count == 2)
+		if(in->fam == 0 && in->op == 0x37 && in->count == 3)
+			snprintf(text, sizeof text, "%s %d, %s, %lld", mn, (int)in->v[0], lbl, (long long)in->v[2]); // jcmp_imm: condition, target, immediate
+		else if(in->fam == 0 && (in->op == 0x15 || in->op == 0x3b) && in->count == 2)
 			snprintf(text, sizeof text, "%s %d, %s", mn, (int)in->v[0], lbl); // jcc / jcmp: the condition first
 		else
 			snprintf(text, sizeof text, "%s %s", mn, lbl);
@@ -618,12 +622,14 @@ uint32_t Dis_StringLength(const DisMap_t* m, uint32_t off)
 int Dis_Program(const uint8_t* file, uint32_t size, const DisOptions_t* opt, FILE* out)
 {
 	DisMap_t m;
+	int problems;
 	fprintf(out, "; openbgi disassembly%s%s\n", opt->name ? " of " : "", opt->name ? opt->name : "");
 	if(!Dis_Analyze(file, size, opt->gen, out, &m))
 		return m.problems;
 	fprintf(out, ".engine %s\n", opt->gen == GEN_COUNT ? "any" : kGenNames[opt->gen]);
 	fprintf(out, "; %u bytes of code area; the entry is offset 0\n\n", (unsigned)m.size);
 	Dis_WriteRange(&m, 0, m.size, opt->gen, opt, out);
+	problems = m.problems; // Dis_FreeMap clears the map
 	Dis_FreeMap(&m);
-	return m.problems;
+	return problems;
 }

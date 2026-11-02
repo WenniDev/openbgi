@@ -1355,6 +1355,21 @@ static int Opcode_Gfx1_SetKeyMap(Thread_t* t) // 91 BF: no, actions →
 
 // -------------------------------------------------------------------------
 
+/* 1.636 on: set one of the two renderer compatibility fields (selectors
+ * 0x01220000 and 0x80111600) of the original's newer renderer backends.
+ * Nothing in this renderer reads them, so the value is dropped; the result
+ * is still whether the selector exists, as the original reports it. */
+static int Opcode_Gfx1_SetCompatParam(Thread_t* t) // 91 0A: selector, value → recognised
+{
+	uint32_t selector;
+	Thread_Pop(t); // the value
+	selector = Thread_Pop(t);
+	Thread_Push(t, selector == 0x01220000u || selector == 0x80111600u);
+	return 0;
+}
+
+// -------------------------------------------------------------------------
+
 /* Fill vm_optable_91 for the selected engine profile.  Each entry names the
  * opcode, its handler and the generations that have it (GEN_FIRST ..
  * GEN_LAST for one that never changed); where an opcode changed meaning
@@ -1367,6 +1382,7 @@ void Vm_Optable91Init(void)
 		{0x06, Opcode_Gfx1_SetGlobalOffset, GEN_1_616, GEN_LAST},
 		{0x55, Opcode_Gfx1_SpriteLinkMask, GEN_1_529, GEN_LAST},
 		{0x09, Opcode_Gfx1_SetSizeLimitSelect, GEN_1_653, GEN_LAST},
+		{0x0A, Opcode_Gfx1_SetCompatParam, GEN_1_636, GEN_LAST},
 		{0x0D, Opcode_Gfx1_SetPropFontAdvance, GEN_1_547, GEN_LAST},
 		{0x0E, Opcode_Gfx1_SetFaceAdjust, GEN_1_529, GEN_LAST},
 		{0x0F, Opcode_Gfx1_FontPreopen, GEN_1_529, GEN_LAST},

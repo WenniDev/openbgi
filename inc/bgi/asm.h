@@ -109,10 +109,11 @@ enum AsmOperandKind
 	ASM_OPD_LOCAL16,  // 1.667+: bits 0..13 the offset below the frame pointer, 14..15 the size code
 	ASM_OPD_SLEB,     // 1.667+: a signed LEB128 immediate
 	ASM_OPD_SLEBREL,  // 1.667+: a signed LEB128 offset from the end of the instruction: a code target ("12")
-	ASM_OPD_REL16     // 1.667+: s16 from the opcode's own offset: a code target ("3B", "15" with cc & 8)
+	ASM_OPD_REL16,    // 1.667+: s16 from the opcode's own offset: a code target ("3B", "15" with cc & 8)
+	ASM_OPD_TYPED     // 1.685+: one SLEB128 holding (value << 2) | size; aux[] receives the size
 };
 
-#define ASM_MAX_OPERANDS 3 // no instruction has more ("1A" / "1B": a local reference and an immediate)
+#define ASM_MAX_OPERANDS 260 // 03 can push 128 values; E2 / E3 can carry 128 local references plus a count
 
 // one decoded instruction (Asm_Decode)
 typedef struct AsmInsn
@@ -123,6 +124,7 @@ typedef struct AsmInsn
 	int op;                          // the opcode
 	int count;                       // the number of operands in `kinds` and `v`
 	uint8_t kinds[ASM_MAX_OPERANDS]; // the kind of each operand (enum AsmOperandKind)
+	uint8_t aux[ASM_MAX_OPERANDS];   // auxiliary value: ASM_OPD_TYPED's access size
 	int64_t v[ASM_MAX_OPERANDS];     // the operand values as read (sign-extended where signed; BYTES: the count)
 	uint32_t target;                 // the resolved offset of a CODEREL / DATAREL / SLEBREL / REL16 operand
 	int targetKind;                  // 0 none, 1 code, 2 data

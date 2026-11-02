@@ -27,11 +27,13 @@
  * tagShift .. heapLimit members of EngineProfile_t:
  *   A  1.58 .. 1.66          24-bit offsets, tags 0x11 code / 0x10 data / 0x12 heap, dynamic from 0x40
  *   B  1.69 builds 444, 451  25-bit offsets, tags 8 / 9 / 0xA, dynamic 0x10 .. 0x3F
- *   C  1.69 build 472 ..     26-bit offsets, tags 1 / 2 / 3, dynamic 16 .. 63 */
+ *   C  1.69 build 472 ..     26-bit offsets, tags 1 / 2 / 3, dynamic 16 .. 63
+ *   E  1.685 on              28-bit offsets, tags 1 / 2 / 3, size-class pools from tag 4 */
 #define LAYOUT_A 24, 0x11, 0x10, 0x12, 0x40, 192, 0x1000000
 #define LAYOUT_B 25, 0x08, 0x09, 0x0a, 0x10, 48, 0x2000000
 #define LAYOUT_C 26, 0x01, 0x02, 0x03, 0x10, 48, 0x4000000
 #define LAYOUT_D 26, 0x01, 0x02, 0x03, 0x10, 0, 0x4000000 // 1.535 on: layout C with the dynamic blocks from size-class pools (dynCount 0, see dynmem.c)
+#define LAYOUT_E 28, 0x01, 0x02, 0x03, 0x04, 0, 0x4000000 // 1.685 on: 28-bit offsets, size-class pools from tag 4
 
 /* the boot thread's code and data areas (the SpawnThread of the boot
  * program): 256 KB each up to build 444, 512 KB of code
@@ -66,6 +68,7 @@ static const EngineProfile_t kDefaultProfiles[GEN_COUNT] = {
 	{"1.662", GEN_1_662, 172, LAYOUT_D, BOOT_C},
 	{"1.667", GEN_1_667, 172, LAYOUT_D, BOOT_C},
 	{"1.669", GEN_1_669, 172, LAYOUT_D, BOOT_C},
+	{"1.685", GEN_1_685, 172, LAYOUT_E, BOOT_C},
 };
 
 /* the profiles in use: the built-in ones, or those of games.json (the
@@ -194,6 +197,7 @@ static const struct
 	{"Yumahorome", "1.662", NULL},
 	{"ArcanaAlchemia", "1.667", NULL},
 	{"HarukaAonoHanayomeni", "1.669", NULL},
+	{"Subarashikihibi15th", "1.685", NULL},
 };
 
 const char* Engine_ProductName(void)

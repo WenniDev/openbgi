@@ -318,7 +318,7 @@ static void TestArith(void)
 		CHECK(c == 0x8000 || c == 0x7fff);
 	}
 	a.len = 0;
-	PushI32(&a, (uint32_t) - (90 << 16));
+	PushI32(&a, (uint32_t)-(90 << 16));
 	Op(&a, 0x48);
 	CHECK(Eval(&a) == 0xffff0000u);
 }
@@ -1076,6 +1076,181 @@ static uint32_t DataPtr(uint32_t off)
 	return off | (gEngine->tagData << VM_TAG_SHIFT);
 }
 
+// signed LEB128, used by the compact instruction tests
+static void Sleb(Asm_t* a, int32_t value)
+{
+	for(;;)
+	{
+		uint8_t b = value & 0x7f;
+		int32_t next = value >> 7;
+		if((next == 0 && !(b & 0x40)) || (next == -1 && (b & 0x40)))
+		{
+			A8(a, b);
+			return;
+		}
+		A8(a, b | 0x80);
+		value = next;
+	}
+}
+
+static void Typed(Asm_t* a, int32_t value, uint32_t size)
+{
+	Sleb(a, (value << 2) | (int32_t)size);
+}
+
+/* The compact base instructions of 1.667 and 1.685.  In particular, 2E is
+ * a + b * imm (not a * b + imm), EA adds its 16-bit offset before storing,
+ * and 15 reads an inline target when condition bit 3 is set. */
+static void TestCompact(void)
+{
+	Asm_t a;
+	printf("compact\n");
+	CHECK(Engine_SelectProfile("1.685"));
+	CHECK(gEngine->tagShift == 28 && gEngine->dynFirst == 4);
+	Vm_TablesInit();
+
+	a.len = 0;
+	PushI32(&a, 0x50000000);
+	PushI32(&a, 2);
+	Op(&a, 0x2e);
+	Sleb(&a, 4);
+	CHECK(Eval(&a) == 0x50000008u);
+
+	a.len = 0;
+	Op(&a, 0x03);
+	A8(&a, 2);
+	Sleb(&a, 13);
+	Sleb(&a, 1280);
+	Sleb(&a, 960);
+	Ret(&a);
+	CHECK(Run(&a) == 4);
+	CHECK(Depth() == 3);
+	CHECK(gT->stack[0] == 13 && gT->stack[1] == 1280 && Top() == 960);
+
+	a.len = 0;
+	Op(&a, 0x13);
+	A16(&a, 3);
+	PushI32(&a, 0x1234);
+	CHECK(Eval(&a) == 0x1234);
+
+	a.len = 0;
+	PushI32(&a, 1);
+	Op(&a, 0x15);
+	A8(&a, 8);
+	A16(&a, 9);
+	PushI32(&a, 0xdead);
+	PushI32(&a, 0x2468);
+	CHECK(Eval(&a) == 0x2468);
+
+	a.len = 0;
+	PushI32(&a, 0x100);
+	Op(&a, 0x11);
+	PushI32(&a, 11);
+	PushI32(&a, 22);
+	Op(&a, 0xe2);
+	A8(&a, 1);
+	A16(&a, 0x8040);
+	A16(&a, 0x8044);
+	Op(&a, 0xe3);
+	A8(&a, 1);
+	A16(&a, 0x8040);
+	A16(&a, 0x8044);
+	Ret(&a);
+	CHECK(Run(&a) == 4);
+	CHECK(Depth() == 2);
+	CHECK(gT->stack[0] == 22 && Top() == 11);
+
+	a.len = 0;
+	PushI32(&a, DataPtr(0x40));
+	Op(&a, 0x0d);
+	Typed(&a, 123, 2);
+	Ret(&a);
+	CHECK(Run(&a) == 4 && *(uint32_t*)(gT->data + 0x40) == 123);
+	a.len = 0;
+	PushI32(&a, 0x100);
+	Op(&a, 0x11);
+	Op(&a, 0x0e);
+	A16(&a, 0x40);
+	Typed(&a, 456, 2);
+	Ret(&a);
+	CHECK(Run(&a) == 4 && *(uint32_t*)(gT->data + 0xc0) == 456);
+
+	/* 0E's local is a full 16-bit offset (the size is in the immediate):
+	 * cnfgwnd._bp stores its result at fp - 0x46F0 in an 18336-byte frame */
+	{
+		Thread_t* small = gT;
+		gT = Thread_New(0x100, 0x1000, 0x8000);
+		CHECK(gT != NULL && gT->valid);
+		a.len = 0;
+		PushI32(&a, 0x4800);
+		Op(&a, 0x11);
+		Op(&a, 0x0e);
+		A16(&a, 0x46f0);
+		Typed(&a, -1, 2);
+		Ret(&a);
+		CHECK(Run(&a) == 4 && *(int32_t*)(gT->data + 0x110) == -1 && *(int32_t*)(gT->data + 0x4110) == 0);
+		Thread_Delete(gT);
+		gT = small;
+	}
+
+	memcpy(gT->data + 0x80, "MakerLogo", 10);
+	*(uint32_t*)(gT->data + 0x40) = DataPtr(0x80);
+	a.len = 0;
+	PushI32(&a, 0x100);
+	Op(&a, 0x11);
+	Op(&a, 0xea);
+	A16(&a, 0x80c0);
+	A16(&a, 4);
+	Sleb(&a, 0);
+	Ret(&a);
+	CHECK(Run(&a) == 4 && gT->data[0x84] == 0 && memcmp(gT->data + 0x80, "Make", 4) == 0);
+
+	/* the size bits are the access size only: the pointer is still a dword
+	 * (cnfgwnd._bp's Default writes word and byte settings this way) */
+	memset(gT->data + 0x80, 0x55, 0x30);
+	a.len = 0;
+	PushI32(&a, 0x100);
+	Op(&a, 0x11);
+	Op(&a, 0xea); // word 4 at +10
+	A16(&a, 0x40c0);
+	A16(&a, 10);
+	Sleb(&a, 4);
+	Op(&a, 0xea); // byte 1 at +36
+	A16(&a, 0x00c0);
+	A16(&a, 36);
+	Sleb(&a, 1);
+	Ret(&a);
+	CHECK(Run(&a) == 4 && *(int16_t*)(gT->data + 0x8a) == 4 && gT->data[0x8c] == 0x55 && gT->data[0xa4] == 1 && gT->data[0xa5] == 0x55);
+
+	/* FA: the index is a dword whatever the size bits say (they size the
+	 * value read): bitmap._bp reads byte 0 of name slot 0x80 this way */
+	*(uint32_t*)(gT->data + 0x40) = 0x80; // the index, at fp - 0xc0
+	memset(gT->data + 0x200, 0, 0x100);
+	gT->data[0x280] = 0x5a;
+	a.len = 0;
+	PushI32(&a, 0x100);
+	Op(&a, 0x11);
+	Op(&a, 0xfa);
+	A32(&a, DataPtr(0x200)); // add
+	A16(&a, 0x00c0);         // the index local, byte access
+	A16(&a, 1);              // mul
+	CHECK(Eval(&a) == 0x5a);
+
+	*(uint32_t*)(gT->data + 0x40) = 18;
+	a.len = 0;
+	PushI32(&a, 0x100);
+	Op(&a, 0x11);
+	Op(&a, 0xef);
+	A32(&a, DataPtr(0x40) | 0x80000000u);
+	Ret(&a);
+	PushI32(&a, 0x1357);
+	Op(&a, 0x17);
+	CHECK(Eval(&a) == 0x1357);
+
+	CHECK(Engine_SelectProfile("1.69/444"));
+	Vm_TablesInit();
+}
+
 /* push the n arguments, run family `fam` instruction `op` and return what it pushed */
 static uint32_t Call(uint32_t fam, uint32_t op, const uint32_t* args, int n)
 {
@@ -1239,7 +1414,11 @@ static void TestFiles(void)
 // make the thread, run every group; exit status 1 when any check failed
 int main(void)
 {
-	setenv("BGI_MSGBOX_STDERR", "1", 1); // error boxes go to stderr instead of a dialog
+#if defined(_WIN32)
+	_putenv("BGI_MSGBOX_STDERR=1"); // error boxes go to stderr instead of a dialog
+#else
+	setenv("BGI_MSGBOX_STDERR", "1", 1);
+#endif
 	OS_Init();
 	Vm_TablesInit();
 	gT = Thread_New(0x100, 0x1000, 0x1000); // 0x100 stack entries, 0x1000 bytes of code and of data
@@ -1254,6 +1433,7 @@ int main(void)
 	TestExtensions();
 	TestLaterBuilds();
 	TestBorrower();
+	TestCompact();
 	TestFiles();
 	Thread_Delete(gT);
 	OS_Shutdown();

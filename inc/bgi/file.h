@@ -200,6 +200,7 @@ int ReadFileEx(void* buf, uint32_t* outSize, const char* dir, const char* name, 
 uint32_t ReadWholeFile(void* buf, const char* dir, const char* name);                                               // bytes read, 0 when not readable
 uint32_t ReadFileAt(void* buf, const char* name);                                                                   // base dir, then alt dir
 int WriteTextFile(const char* name, const void* buf, uint32_t len);                                                 // create in the base dir (or an absolute path); bytes written
+uint32_t LoadFile_BufferSize(void);                                                                                 // the size of a buffer LoadFile fills: the decoded readers' limit, at least 32 MB
 uint32_t GetFileSize_(const char* arc, const char* name);                                                           // "80 35": the loaded (DSC-decoded) size, by reading; 0 not found
 uint32_t GetFileSizeFast(const char* arc, const char* name);                                                        // "81 35" (1.588 on): the stored size without reading; 0 not found
 int FileExists(const char* arc, const char* name);                                                                  // "80 34"

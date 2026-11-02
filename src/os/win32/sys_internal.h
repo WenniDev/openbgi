@@ -25,9 +25,7 @@
 #include "bgi/os_common.h"
 
 // BGI_X86: the compiler offers the CPUID and RDTSC intrinsics machine.c uses; without it OS_Cpuid and OS_ReadTsc report "unavailable"
-#if defined(__GNUC__) && (defined(__i386__) || defined(__x86_64__))
-#include <cpuid.h>
-#include <x86intrin.h>
+#if (defined(__GNUC__) || defined(__clang__)) && (defined(__i386__) || defined(__x86_64__))
 #define BGI_X86 1
 #endif
 

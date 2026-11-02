@@ -710,8 +710,9 @@ static void EmitSleb(As_t* a, int64_t v)
  * data / code target from the opcode's offset, z size code, i inline
  * bytes, q count, k condition, L local reference (two source operands:
  * offset and size code), s signed LEB128, S signed LEB128 code target from
- * the end of the instruction, r s16 code target; '?' the optional target
- * of "15" in 1.667+ */
+ * the end of the instruction, r s16 code target, V typed immediate (value,
+ * access size), P the variable push of 1.685, M a local list; '?' the
+ * optional target of "15" in 1.667+ */
 static const char* Formats(int op, EngineGen_t gen)
 {
 	switch(op)
@@ -727,23 +728,54 @@ static const char* Formats(int op, EngineGen_t gen)
 		case 0x0a: return "z";
 		case 0x0b: return "i";
 		case 0x0c: return "zq";
+		case 0x03: return "P";
+		case 0x0d: return "V";
+		case 0x0e: return "LV";
+		case 0x13: return "j";
 		case 0x15: return (gen == GEN_COUNT || gen >= GEN_1_667) ? "k?" : "k";
 		case 0x0f:
 		case 0x19:
 		case 0x1d:
 		case 0x1e: return "L";
-		case 0x12: return "S";
+		case 0x12: return "s";
 		case 0x18: return "w";
 		case 0x1a:
 		case 0x1b: return "Ls";
 		case 0x1c: return "Lb";
-		case 0x1f:
+		case 0x1f: return "V";
 		case 0x2c:
 		case 0x2d:
 		case 0x2e:
 		case 0x2f: return "s";
+		case 0x36: return "ks";
+		case 0x37: return "krs";
 		case 0x3b: return "kr";
 		case 0x3c: return "b";
+		case 0x3e: return "k";
+		case 0x3f: return "ks";
+		case 0xe2:
+		case 0xe3: return "M";
+		case 0xe4:
+		case 0xe5:
+		case 0xe6:
+		case 0xe7: return "LV";
+		case 0xe8: return "L";
+		case 0xe9: return "Lh";
+		case 0xea: return "Lhs";
+		case 0xec: return "s";
+		case 0xed: return "Ls";
+		case 0xee: return "j";
+		case 0xef: return (gen == GEN_COUNT || gen >= GEN_1_685) ? "w" : "";
+		case 0xf0: return "wLs";
+		case 0xf1: return "LLs";
+		case 0xf2: return "LhLs";
+		case 0xf4: return "LwLh";
+		case 0xf5: return "LLhLh";
+		case 0xf7: return "Lhh";
+		case 0xf8: return "wLh";
+		case 0xf9: return "LhLh";
+		case 0xfa: return "wLh";
+		case 0xfb: return "LLh";
 		default: return "";
 	}
 }
@@ -858,6 +890,79 @@ static void EncodeInsn(As_t* a, Stmt_t* s, int fam, int op, Operand_t* opd, int 
 			v = 0;
 		switch(c)
 		{
+			case 'P': // push_values: a control byte, then count + 1 immediates (or one fixed-width value)
+			{
+				int64_t control = v;
+				Emit8(a, control);
+				p++;
+				if(control < 0x80)
+				{
+					int64_t j;
+					for(j = 0; j <= control; j++)
+					{
+						if(oi >= count)
+						{
+							if(final)
+								Error(a, s->line, "push_values needs %lld immediates", (long long)(control + 1));
+							break;
+						}
+						if(!Eval(a, opd[oi++].expr, s->line, final, &v))
+							v = 0;
+						EmitSleb(a, v);
+						p += SlebLen(v);
+					}
+				}
+				else if((control & 0x7c) == 0)
+				{
+					int64_t width = 1LL << (control & 3), k;
+					if(oi >= count)
+					{
+						if(final)
+							Error(a, s->line, "a fixed-width immediate is missing");
+						break;
+					}
+					if(!Eval(a, opd[oi++].expr, s->line, final, &v))
+						v = 0;
+					for(k = 0; k < width; k++)
+						Emit8(a, v >> (k * 8));
+					p += (uint32_t)width;
+				}
+				break;
+			}
+			case 'M': // a count, then count + 1 local references (offset, size)
+			{
+				int64_t j, locals = v;
+				Emit8(a, locals);
+				p++;
+				for(j = 0; j <= locals; j++)
+				{
+					if(oi + 1 >= count)
+					{
+						if(final)
+							Error(a, s->line, "a local reference needs an offset and a size code");
+						break;
+					}
+					if(!Eval(a, opd[oi++].expr, s->line, final, &v))
+						v = 0;
+					if(!Eval(a, opd[oi++].expr, s->line, final, &v2))
+						v2 = 0;
+					Emit16(a, (v & 0x3fff) | (v2 << 14));
+					p += 2;
+				}
+				break;
+			}
+			case 'V': // a typed immediate: a packed value, or value and access size as two operands
+				if(oi >= count)
+				{
+					EmitSleb(a, v); // the original one-operand source form: the value is already packed
+					p += SlebLen(v);
+					break;
+				}
+				if(!Eval(a, opd[oi++].expr, s->line, final, &v2))
+					v2 = 0;
+				EmitSleb(a, (v << 2) | v2);
+				p += SlebLen((v << 2) | v2);
+				break;
 			case 'b':
 				if(final && !Fits(v, -128, 255))
 					Error(a, s->line, "value %lld does not fit a byte", (long long)v);

@@ -30,7 +30,7 @@
 #include "bgi/version.h"
 #include "bgi/picture.h"
 
-#define LOAD_BUFFER 0x2000000 // 32 MB: the engine's load buffer
+#define LOAD_BUFFER LoadFile_BufferSize() // the engine's load buffer: 32 MB, or the decoded readers' larger limit
 
 /* "90 10": load an image file into a slot.  The loader's cache is consulted
  * first; a Windows BMP is decoded directly, anything else must be a raw

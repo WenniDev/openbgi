@@ -29,12 +29,15 @@ static int gDynReady;                         // DynMem_Init has run
 /* 1.535 on: the dynamic blocks come from five size-class pools instead of
  * one tag per block.  A pool has `count` slots of at most `maxSize` bytes;
  * a pointer into its slot s is
- * (firstTag + (s >> (26 - bits))) << 26 | (s & ((1 << (26 - bits)) - 1))
- * << bits | offset, so the pools take the tags 0x10 .. 0x3F between them
- * and a 4 KB block costs a 14-bit slot number plus 12 offset bits rather
- * than a tag of its own.  GAlloc takes the first pool whose maximum fits
- * the size and that still has a free slot (a full pool falls through to
- * the next, larger one). */
+ * (firstTag + (s >> (VM_TAG_SHIFT - bits))) << VM_TAG_SHIFT |
+ * (s & ((1 << (VM_TAG_SHIFT - bits)) - 1)) << bits | offset, so with
+ * 26-bit offsets the pools take the tags 0x10 .. 0x3F between them and a
+ * 4 KB block costs a 14-bit slot number plus 12 offset bits rather than a
+ * tag of its own.  1.685 has 28-bit offsets and the first tags 4 .. 8;
+ * each pool ends at the next one's first tag and the last at 0x0C
+ * (kTags1685).  GAlloc takes the first pool whose maximum fits the size
+ * and that still has a free slot (a full pool falls through to the next,
+ * larger one). */
 typedef struct DynPool
 {
 	uint32_t count, bits, maxSize, firstTag; // slots; offset bits per slot; largest block, bytes; first tag
@@ -47,7 +50,8 @@ static DynPool_t gDynPools[5] = {
 	{0x10, 24, 0x1000000, 0x1c, NULL},
 	{0x20, 26, 0x4000000, 0x20, NULL},
 };
-#define DYN_POOLED (gEngine->dynCount == 0) // the profile uses the pools
+static const uint32_t kTags1685[5] = {1, 1, 1, 1, 4}; // 1.685: the tags each pool spans (4 .. 0x0B)
+#define DYN_POOLED (gEngine->dynCount == 0)           // the profile uses the pools
 
 // the pool a tag belongs to, with the slot of (tag, offset); NULL when none
 static DynPool_t* DynPool_Of(uint32_t tag, uint32_t off, uint32_t* outSlot)
@@ -56,10 +60,10 @@ static DynPool_t* DynPool_Of(uint32_t tag, uint32_t off, uint32_t* outSlot)
 	for(i = 0; i < BGI_COUNTOF(gDynPools); i++)
 	{
 		DynPool_t* p = &gDynPools[i];
-		uint32_t tags = p->count >> (26 - p->bits); // the tags the pool spans
+		uint32_t tags = gEngine->gen >= GEN_1_685 ? kTags1685[i] : p->count >> (VM_TAG_SHIFT - p->bits); // the tags the pool spans
 		if(tag >= p->firstTag && tag < p->firstTag + tags)
 		{
-			*outSlot = ((tag - p->firstTag) << (26 - p->bits)) | (off >> p->bits);
+			*outSlot = ((tag - p->firstTag) << (VM_TAG_SHIFT - p->bits)) | (off >> p->bits);
 			return p;
 		}
 	}
@@ -89,8 +93,11 @@ static void DynPools_Ensure(void) // the slot tables, made on first use (the pro
 {
 	size_t i;
 	for(i = 0; i < BGI_COUNTOF(gDynPools); i++)
+	{
+		gDynPools[i].firstTag = gEngine->gen >= GEN_1_685 ? 4 + (uint32_t)i : 0x10 + 4 * (uint32_t)i;
 		if(!gDynPools[i].blocks)
 			gDynPools[i].blocks = (uint8_t**)BGI_Calloc(gDynPools[i].count * sizeof(uint8_t*));
+	}
 }
 
 void DynMem_Init(void)
@@ -139,8 +146,8 @@ uint32_t GAlloc(uint32_t size)
 				{
 					uint32_t slot = (uint32_t)j;
 					p->blocks[j] = (uint8_t*)BGI_Calloc(size ? size : 1);
-					return ((p->firstTag + (slot >> (26 - p->bits))) << 26) |
-						((slot & ((1u << (26 - p->bits)) - 1u)) << p->bits);
+					return ((p->firstTag + (slot >> (VM_TAG_SHIFT - p->bits))) << VM_TAG_SHIFT) |
+						((slot & ((1u << (VM_TAG_SHIFT - p->bits)) - 1u)) << p->bits);
 				}
 		}
 		return 0;
@@ -162,7 +169,7 @@ int GFree(uint32_t ptr)
 	uint32_t slot;
 	if(DYN_POOLED)
 	{
-		DynPool_t* p = DynPool_Of(ptr >> 26, ptr & 0x3ffffffu, &slot);
+		DynPool_t* p = DynPool_Of(ptr >> VM_TAG_SHIFT, ptr & VM_OFFSET_MASK, &slot);
 		DynPools_Ensure();
 		if(!p || (ptr & ((1u << p->bits) - 1u)) || !p->blocks[slot]) // must point at the block start
 			return 0;

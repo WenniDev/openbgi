@@ -33,8 +33,8 @@ int gDisplayEnabled = 1; // "90 01": nothing is presented while 0
 
 /* The picture sizes by size index.  The table changed with the builds,
  * and from 1.494 on a script can redefine an entry ("81 60"). */
-int gScreenWidths[8] = {320, 640, 800, 1024, 1152, 1280, 1600, 0};
-int gScreenHeights[8] = {240, 480, 600, 768, 864, 960, 1200, 0};
+int gScreenWidths[16] = {320, 640, 800, 1024, 1152, 1280, 1600, 0};
+int gScreenHeights[16] = {240, 480, 600, 768, 864, 960, 1200, 0};
 
 static int gFrameW, gFrameH;           // what the window manager adds around the client area, pixels
 static int gScreenW, gScreenH;         // the screen size (halved for two monitors side by side)
@@ -76,14 +76,16 @@ void Display_InitSizeTable(void)
 		w = w659, h = h659;
 	else if(gEngine->gen >= GEN_1_494)
 		w = w494, h = h494;
-	memcpy(gScreenWidths, w, sizeof gScreenWidths);
-	memcpy(gScreenHeights, h, sizeof gScreenHeights);
+	memset(gScreenWidths, 0, sizeof gScreenWidths);
+	memset(gScreenHeights, 0, sizeof gScreenHeights);
+	memcpy(gScreenWidths, w, 8 * sizeof *w);
+	memcpy(gScreenHeights, h, 8 * sizeof *h);
 }
 
 // "81 60" (1.494 on): redefine a size entry; 0 ok, 1 bad index, 2 bad size.
 int Display_SetSizeEntry(int idx, int w, int h)
 {
-	if((unsigned)idx >= 8)
+	if((unsigned)idx >= (gEngine->gen >= GEN_1_685 ? 16u : 8u))
 		return 1;
 	if(w <= 0 || h <= 0)
 		return 2;
@@ -142,7 +144,7 @@ void Display_CentredWindowPos(int w, int h, int* x, int* y)
  * always 0 on a 4:3 screen. */
 int CanFullscreen(int sizeIdx)
 {
-	if(gAspectClass == 0 || sizeIdx >= 7)
+	if(gAspectClass == 0 || sizeIdx >= (gEngine->gen >= GEN_1_685 ? 15 : 7))
 		return 0;
 	// the next entry must be a larger mode (the 1.494+ tables are not sorted)
 	if(gScreenWidths[sizeIdx + 1] <= gScreenWidths[sizeIdx] || gScreenHeights[sizeIdx + 1] <= gScreenHeights[sizeIdx])

@@ -136,18 +136,29 @@ void OS_SetEventHandlers(const OsEventHandlers_t* h)
 	gWin32Handlers = *h;
 }
 
-// the fixed frame of a WS_CAPTION pop-up: twice the fixed border in width, the caption plus twice the border in height; also stored for OS_WindowCreate
+// the frame of the WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX main window around an empty client area, padded border included
+static void MainFrameRect(RECT* r)
+{
+	SetRect(r, 0, 0, 0, 0);
+	AdjustWindowRectEx(r, 0x80ca0000, FALSE, 0);
+}
+
+// the frame added around a client area; also stored for OS_WindowCreate
 void OS_FrameMetrics(int* fw, int* fh)
 {
-	gWin32FrameW = GetSystemMetrics(SM_CXFIXEDFRAME) * 2;
-	gWin32FrameH = GetSystemMetrics(SM_CYCAPTION) + GetSystemMetrics(SM_CYFIXEDFRAME) * 2;
+	RECT r;
+	MainFrameRect(&r);
+	gWin32FrameW = r.right - r.left;
+	gWin32FrameH = r.bottom - r.top;
 	*fw = gWin32FrameW;
 	*fh = gWin32FrameH;
 }
 
 int OS_FrameTop(void) // the caption and the top border
 {
-	return GetSystemMetrics(SM_CYCAPTION) + GetSystemMetrics(SM_CYFIXEDFRAME);
+	RECT r;
+	MainFrameRect(&r);
+	return -r.top;
 }
 
 void OS_ScreenSize(int* w, int* h)

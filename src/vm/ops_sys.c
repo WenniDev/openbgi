@@ -1037,7 +1037,7 @@ static int Opcode_Sys_SetDisplayMode(Thread_t* t) // 80 60: sizeIdx, pixelMode, 
 	uint32_t fullscreen = Thread_Pop(t), pixelMode = Thread_Pop(t), sizeIdx = Thread_Pop(t);
 	if(pixelMode >= 2)
 		ScriptError(MSG_BAD_PIXEL_MODE, t);
-	if(sizeIdx >= (gEngine->gen >= GEN_1_494 ? 8u : 4u)) // the size table has eight entries from 1.494 on, four before
+	if(sizeIdx >= (gEngine->gen >= GEN_1_685 ? 16u : (gEngine->gen >= GEN_1_494 ? 8u : 4u))) // the size table has sixteen entries from 1.685, eight from 1.494, four before
 		ScriptError(MSG_BAD_SCREEN_SIZE, t);
 	SetDisplayMode((int)sizeIdx, (int)pixelMode, (int)fullscreen);
 	return 0;

@@ -1,7 +1,7 @@
 # Engine versions and profiles
 
 The games run the same engine in different builds, from ver 1.58 of 2005
-to 1.669 of 2023.  One binary runs all of them: the differences between
+to 1.685 of 2025.  One binary runs all of them: the differences between
 the builds are kept in an engine profile (`inc/bgi/version.h`, `gEngine`)
 selected once at start-up - from the game's `ipl._bp` through
 `games.json`, from the command line (`--engine=NAME`, `--list-engines`;
@@ -55,6 +55,7 @@ build 472 on" in the source comments), all keyed on the generation
 | yumahorome.exe | Yumahorome | 2021-09-26 | 1.662.1 | 1.72 | VS2017 |
 | arcana.exe | ArcanaAlchemia | 2022-08-19 | 1.667 | 1.72 | VS2017 |
 | haruyome.exe | HarukaAonoHanayomeni | 2023-04-26 | 1.669.1 | 1.72 | VS2017 |
+| BGI.exe | Subarashikihibi15th | 2025-04-23 | 1.685.3 | 1.72 | x64 |
 
 "compat" is the `Compatibility : x.xx` of the version resource (the
 script-level compatibility the engine declares); the ver 1.58 .. 1.69
@@ -140,6 +141,7 @@ dynamic-block allocator ("80 20") depend on:
 | 1.58 .. 1.66 | 24 | tag 0x00 | 0x11 | 0x10 | 0x12 | 0x40.. (tag - 0x40) | 16 MB |
 | 1.69 builds 438 .. 451 (Fortune Arterial, Tayutama) | 25 | 0x00 | 0x08 | 0x09 | 0x0A | 0x10..0x3F (tag - 0x10) | 32 MB |
 | 1.69 build 472 .. 1.669 | 26 | 0 | 1 | 2 | 3 | 16..63 (tag - 16); 4..15 are errors | 64 MB |
+| 1.685 | 28 | 0 | 1 | 2 | 3 | size-class pools, first tags 4, 5, 6, 7, 8 | 64 MB |
 
 Compiled scripts embed such pointers - `syswnd._bp`
 of Tayutama does `push32 0x20220400`, dynamic block 0 of the 1.69 build
@@ -184,6 +186,11 @@ profile of its own build.  The reimplementation keeps it in
   "検証結果" message box in 1.653) becomes a family dispatcher with a single
   opcode `7F 00` ("未定義のシステム制御命令 $7F%02X"); the conditional jump
   `15` reads an extra 16-bit immediate.
+* 1.685 (Subarashikihibi15th): 28-bit tagged pointers and a 64-bit host
+  executable.  New base opcodes `03 0D 0E 13 36 37 3E 3F E2..EA EC..F2 F4 F5
+  F7..FB`; `EF` is a call through a typed pointer, not a new family.  The
+  display-size table grows from 8 to 16 entries, and dynamic-memory pool
+  first tags are 4, 5, 6, 7 and 8.  `91 F6` exists again.
 
 ## What the reimplementation does about it
 
@@ -303,6 +310,14 @@ profile of its own build.  The reimplementation keeps it in
 Per family, the defined opcodes of the newest build (1.669) and of all the
 older ones, each with the first version that has it; an opcode that was
 dropped again carries the version that dropped it in brackets.
+
+The 1.685 compact forms use signed LEB128 immediates and packed local
+references.  `12` adjusts the frame pointer (it is not a jump); `13` is the
+16-bit relative jump.  A typed immediate is one SLEB128 containing
+`(value << 2) | size`.  `03` carries a count and that many plus one
+immediates, and `E2` / `E3` carry a count and that many plus one packed
+local references.  `2E` computes `a + b * imm`; `EA` stores its immediate at
+`local_pointer + unsigned_16_bit_offset`.
 
 **main** (120): 00:1.58/389.2 01:1.58/389.2 02:1.58/389.2 04:1.58/389.2 05:1.58/389.2 06:1.58/389.2 08:1.58/389.2 09:1.58/389.2 0A:1.58/389.2 0B:1.58/389.2 0C:1.58/389.2 0F:1.667 10:1.58/389.2 11:1.58/389.2 12:1.667 14:1.58/389.2 15:1.58/389.2 16:1.58/389.2 17:1.58/389.2 18:1.667 19:1.667 1A:1.667 1B:1.667 1C:1.667 1D:1.667 1E:1.667 1F:1.667 20:1.58/389.2 21:1.58/389.2 22:1.58/389.2 23:1.58/389.2 24:1.58/389.2 25:1.58/389.2 26:1.58/389.2 27:1.58/389.2 28:1.58/389.2 29:1.58/389.2 2A:1.58/389.2 2B:1.58/389.2 2C:1.667 2D:1.667 2E:1.667 2F:1.667 30:1.58/389.2 31:1.58/389.2 32:1.58/389.2 33:1.58/389.2 34:1.58/389.2 35:1.58/389.2 38:1.58/389.2 39:1.58/389.2 3A:1.58/389.2 3B:1.667 3C:1.667 40:1.58/389.2 42:1.69/444.2 43:1.69/472.2 44:1.573.2 45:1.654.3 46:1.662.1 47:1.662.1 48:1.58/389.2 49:1.58/389.2 50:1.69/472.2 51:1.69/472.2 52:1.69/472.2 53:1.69/472.2 54:1.69/472.2 55:1.653.3 56:1.636.1 57:1.636.1 58:1.636.1 59:1.636.1 5A:1.636.1 5B:1.636.1 5D:1.636.1 5E:1.636.1 5F:1.636.1 60:1.58/389.2 61:1.58/389.2 62:1.58/389.2 63:1.58/389.2 64:1.588.3 65:1.588.3 66:1.529.2 67:1.66/428.6 68:1.58/389.2 69:1.58/389.2 6A:1.58/389.2 6B:1.58/389.2 6C:1.58/389.2 6D:1.58/389.2 6E:1.58/389.2 6F:1.58/389.2 70:1.58/389.2 71:1.58/389.2 73:1.667 74:1.69/444.2 75:1.69/444.2 76:1.573.2[-1.588.3] 77:1.494 78:1.58/389.2 79:1.58/389.2 7A:1.58/389.2 7B:1.58/389.2 7C:1.494 7D:1.58/389.2 7E:1.69/472.2 7F:1.58/389.2 80:1.58/389.2 81:1.69/451.3 90:1.58/389.2 91:1.58/389.2 92:1.58/389.2 A0:1.58/389.2 B0:1.58/389.2 C0:1.58/389.2 D0:1.535.1 E0:1.588.3 FF:1.66/428.6
 

@@ -91,7 +91,7 @@ static void WaitLoader_Ctor(WaitLoader_t* w, Thread_t* t, const char* arc, const
 	strcpy(w->name, name);
 	SjisStrLwr(w->name);
 	w->useCache = useCache && gFileCache != NULL;
-	w->buf = (uint8_t*)BGI_Alloc(0x2000000);
+	w->buf = (uint8_t*)BGI_Alloc(LoadFile_BufferSize());
 	if(w->useCache)
 	{
 		w->cacheHit = FileCache_Lookup(gFileCache, w->buf, &w->status, ARC_ARG(w), w->name) != 0;

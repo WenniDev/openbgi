@@ -91,10 +91,16 @@ them inline (everything else comes from the evaluation stack):
 | 1.667+: `store_local n, s`, `push_local n, s`, `mul_local`, `div_local` | a local reference: offset below the frame pointer and size code |
 | 1.667+: `push_local_add n, s, v`, `push_local_index n, s, v` | ... and a varint immediate |
 | 1.667+: `push_local_shl n, s, b` | ... and a byte |
-| 1.667+: `jmp_rel L` | a varint offset from the end of the instruction |
-| 1.667+: `load_abs v` (u32), `load_rel v`, `add_imm v`, `mul_imm v`, `muladd_imm v`, `div_imm v` (varints) | |
+| 1.667+: `add_fp v` | a varint added to the frame pointer |
+| 1.685+: `jmp_rel L` | a signed 16-bit offset from the opcode's own offset |
+| 1.667+: `load_abs v` (u32), `load_rel v`, `add_imm v`, `mul_imm v`, `muladd_imm v`, `div_imm v` (varints) | `muladd_imm` computes `a + b * v` |
 | 1.667+: `jcmp c, L` | a condition byte and a relative target |
 | 1.667+: `shift_imm b` | |
+| 1.685+: `push_values n, v...` | `n + 1` varint immediates; fixed-width forms carry a control byte of `0x80..0x83` and one value |
+| 1.685+: typed operands `v, s` | one varint encoding `(v << 2) | s`, where `s` is the access size |
+| 1.685+: `store_multi_local n, off, size, ...`, `load_multi_local n, off, size, ...` | a count and `n + 1` packed local references |
+| 1.685+: `jcmp_imm c, L, v` | a condition byte, a relative target and a varint immediate |
+| 1.685+: `store_indirect_local_imm n, off, size, v` | an unsigned 16-bit offset added to the local pointer, then the value |
 
 Convenience forms the assembler expands: `push V` (`push_i8` /
 `push_i16` / `push_i32` by the value), `jmp L`, `call L`, `jcc C, L` (a

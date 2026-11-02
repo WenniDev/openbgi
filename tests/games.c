@@ -69,6 +69,7 @@ static void TestDefaults(void)
 	CHECK(Engine_ProfileCount() == GEN_COUNT);
 	CHECK(ProfileNamed("1.69/444") != NULL && ProfileNamed("1.69/444")->gen == GEN_1_69_444);
 	CHECK(ProfileNamed("1.669") != NULL && ProfileNamed("1.669")->tagShift == 26 && ProfileNamed("1.669")->bootCode == 0x800000);
+	CHECK(ProfileNamed("1.685") != NULL && ProfileNamed("1.685")->tagShift == 28 && ProfileNamed("1.685")->dynFirst == 4);
 	CHECK(Engine_SelectProfile("1.553") && gEngine->gen == GEN_1_553 && gEngine->compat == 169);
 	CHECK(!Engine_SelectProfile("9.99"));
 	n = gDefaultGames = Engine_GameCount();
@@ -78,6 +79,8 @@ static void TestDefaults(void)
 	CHECK(ProfileNamed("1.636") != NULL && ProfileNamed("1.636")->gen == GEN_1_636 && ProfileNamed("1.636")->dynCount == 0 &&
 		ProfileNamed("1.636")->bootCode == 0x800000 && ProfileNamed("1.616")->bootCode == 0x80000);
 	CHECK(Engine_DetectGame((const uint8_t*)"x\0SenNoHatouTsukisomeNoKouki\0", 29) != NULL && gEngine->gen == GEN_1_636);
+	CHECK(Engine_DetectGame((const uint8_t*)"x\0Subarashikihibi15th\0", 22) != NULL && gEngine->gen == GEN_1_685);
+	CHECK(strcmp(Engine_ProductName(), "Subarashikihibi15th") == 0);
 	CHECK(Engine_GameAt(0, &g) && strcmp(g.match, "NurseryRhymeTrial") == 0 && strcmp(g.product, "NurseryRhyme") == 0);
 	CHECK(Engine_GameAt(1, &g) && strcmp(g.product, g.match) == 0 && strcmp(g.name, g.match) == 0 && g.directory == NULL);
 	CHECK(!Engine_GameAt(n, &g));
@@ -92,7 +95,7 @@ static void TestDefaults(void)
 	CHECK(Engine_LoadGamesJson(gPath) == n);
 	CHECK(Engine_ProfileCount() == GEN_COUNT && strcmp(gEngine->name, "1.58") == 0); // the selection survives a reload
 	CHECK(ProfileNamed("1.64") != NULL && ProfileNamed("1.64")->dynCount == 192 && ProfileNamed("1.64")->heapLimit == 0x1000000);
-	CHECK(Engine_GameAt(n - 1, &g) && strcmp(g.match, "HarukaAonoHanayomeni") == 0 && strcmp(g.profile, "1.669") == 0);
+	CHECK(Engine_GameAt(n - 1, &g) && strcmp(g.match, "Subarashikihibi15th") == 0 && strcmp(g.profile, "1.685") == 0);
 }
 
 static void TestProfiles(void)

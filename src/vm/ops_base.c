@@ -278,7 +278,7 @@ static int Opcode_Ret(Thread_t* t) // 17: →
  * and b (the signed operators cast inside it).  The comparisons and the
  * logical operators push 0 or 1. */
 #define BINOP(name, expr)                              \
-	static int name(Thread_t* t) /* a, b → a op b */ \
+	static int name(Thread_t* t) /* a, b → a op b */   \
 	{                                                  \
 		uint32_t b = Thread_Pop(t), a = Thread_Pop(t); \
 		Thread_Push(t, (uint32_t)(expr));              \
@@ -1144,7 +1144,7 @@ int Opcode_NotImplemented(Thread_t* t)
 	uint32_t ip = Thread_CurOpIP(t);
 	uint8_t op = t->code[ip];
 	char msg[0x100];
-	if(op >= 0x7f && op != 0xff)
+	if(op >= 0x7f && op != 0xff && !(gEngine->gen >= GEN_1_685 && op > 0xe0)) // a family byte; 1.685's E1 .. FE are base opcodes
 		sprintf(msg, "Opcode $%02X%02X of engine version %s is not implemented yet", op, t->code[ip + 1], gEngine->name);
 	else
 		sprintf(msg, "Opcode $%02X of engine version %s is not implemented yet", op, gEngine->name);
@@ -1188,6 +1188,7 @@ void Vm_ListMissing(FILE* out)
 void Vm_TablesInit(void)
 {
 	Vm_OptableMainInit();
+	Vm_OptableCompactInit();
 	Vm_Optable80Init();
 	Vm_Optable90Init();
 	Vm_Optable91Init();

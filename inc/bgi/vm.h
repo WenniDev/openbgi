@@ -429,6 +429,7 @@ void CheckTransparency(uint32_t level, Thread_t* t);  // 0.. 256
 
 // table initialisers, one per family (static data in the original); Vm_TablesInit calls them
 void Vm_OptableMainInit(void);
+void Vm_OptableCompactInit(void); // ops_compact.c: the compact base instructions of 1.667 / 1.685
 void Vm_Optable80Init(void);
 void Vm_Optable81Init(void); // ops_sys81.c (1.69/472 on)
 void Vm_Optable90Init(void);

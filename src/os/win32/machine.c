@@ -18,6 +18,11 @@
  */
 #include "sys_internal.h"
 
+#ifdef BGI_X86
+#include <cpuid.h>
+#include <x86intrin.h>
+#endif
+
 // ---- machine identity --------------------------------------------------------------------------
 
 // GlobalMemoryStatus, every field as the 32-bit API reports it ("80 0D" reads totalPhys and availPhys)

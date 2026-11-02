@@ -5,7 +5,7 @@ OpenBGI is an open-source reimplementation, in C99, of Ethornell's
 reverse-engineered function by function from the `tayutama.exe` build
 (ver 1.69, build 444.2, with the "Wave Master" sound library) and
 extended to run the scripts of the engine's other builds, from ver 1.58
-to ver 1.669 (`docs/versions.md`).  Every function keeps the original's
+to ver 1.685 (`docs/versions.md`).  Every function keeps the original's
 results for the same inputs, including its result codes and quirks.  The
 Windows specifics sit behind an OS layer (`inc/bgi/os.h`) with a Win32
 back end, a Linux back end (X11, FreeType, ALSA) and a WebAssembly back
@@ -52,6 +52,7 @@ The games we have been working on, with the engine build each one needs
 | Yumahorome | `Yumahorome` | 1.662 | Boots, but crashes in prolouge |
 | Arcana Alchemia | `ArcanaAlchemia` | 1.667 | Testing in progress |
 | Haruka Ao no Hanayome ni | `HarukaAonoHanayomeni` | 1.669 | Testing in progress |
+| Subarashiki Hibi -15th Anniversary Edition- | `Subarashikihibi15th` | 1.685 | Playable |
 
 ### Definitions
 
@@ -235,8 +236,8 @@ directories offer for "ＭＳ ゴシック" / "ＭＳ 明朝".
     src/dump/       dumping a game's archives into editable files and
                     packing them again (bin/bgidump, bin/bgipack)
     src/vm/         the script machine: threads, the scheduler, the opcode
-                    families (ops_base, ops_sys, ops_sys81, ops_gfx0 .. 2,
-                    ops_snd, ops_ext0, ops_ext1), the tracing aids
+                    families (ops_base, ops_compact, ops_sys, ops_sys81,
+                    ops_gfx0 .. 2, ops_snd, ops_ext0, ops_ext1), the tracing aids
     src/wait/       wait objects (text output, tweens, menus, loads, ...)
     src/sys/        the engine object, main window, display and presentation,
                     input, cursor, panels, child windows, text entry,

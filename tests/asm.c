@@ -33,6 +33,12 @@
 
 #include <stdio.h>
 
+#if defined(_WIN32)
+#define NULL_DEVICE "NUL"
+#else
+#define NULL_DEVICE "/dev/null"
+#endif
+
 static int gFails; // the number of failed checks so far
 // evaluate a condition; print it with its location and count a failure when it is false
 #define CHECK(c)                                                  \
@@ -54,7 +60,7 @@ static uint32_t Assemble(const char* text, EngineGen_t gen, uint8_t* out, uint32
 {
 	AsmResult_t r;
 	uint32_t n;
-	FILE* log = quiet ? fopen("/dev/null", "w") : stderr;
+	FILE* log = quiet ? fopen(NULL_DEVICE, "w") : stderr;
 	Asm_Assemble(text, strlen(text), gen, log, &r);
 	if(quiet)
 		fclose(log);
@@ -130,24 +136,31 @@ static void TestEncodings(void)
 	n = Assemble(".str \"あ\\x81\\x40\\n\\\"\\\\\"\n", GEN_1_69_444, b, sizeof b, 0);
 	CHECK(n == 8 && Bytes(b, n, "82 a0 81 40 0a 22 5c 00"));
 	// the 1.667 forms: packed local references, varint immediates and rel16 targets
-	n = Assemble("store_local 0x10, 2\njmp_rel t\npush_local 4, 0\npush_local_add 8, 0, -3\npush_local_shl 4, 1, 1\nload_rel 300\nadd_imm -64\njcmp 3, t\njcc 9, t\nshift_imm -2\nt:\n", GEN_1_667, b, sizeof b, 0);
-	CHECK(n == 31);
+	n = Assemble("store_local 0x10, 2\nadd_fp 300\npush_local 4, 0\npush_local_add 8, 0, -3\npush_local_shl 4, 1, 1\nload_rel 300\nadd_imm -64\njcmp 3, t\njcc 9, t\nshift_imm -2\nt:\n", GEN_1_667, b, sizeof b, 0);
+	CHECK(n == 32);
 	CHECK(b[0] == 0x0f && b[1] == 0x10 && b[2] == 0x80);                     // local16: offset 0x10, size 2 in bits 14..15
-	CHECK(b[3] == 0x12);                                                     // jmp_rel
-	CHECK(b[5] == 0x19 && b[6] == 0x04 && b[7] == 0x00);                     // push_local 4, 0
-	CHECK(b[8] == 0x1a && b[11] == 0x7d);                                    // -3 as a varint
-	CHECK(b[12] == 0x1c && b[13] == 0x04 && b[14] == 0x40 && b[15] == 0x01); // push_local_shl 4, 1, 1
-	CHECK(b[16] == 0x1f && b[17] == 0xac && b[18] == 0x02);                  // 300 as a varint
-	CHECK(b[19] == 0x2c && b[20] == 0x40);                                   // -64 as a varint (one byte, bit 6 set)
-	CHECK(b[21] == 0x3b && b[22] == 0x03);                                   // jcmp 3, rel16 from its own offset
-	CHECK(b[25] == 0x15 && b[26] == 0x09);                                   // jcc 9, rel16
-	CHECK(b[29] == 0x3c && b[30] == 0xfe);
-	{ // the relative targets of the 1.667 forms decode back to the label's offset (31, the end)
+	CHECK(b[3] == 0x12);                                                     // add_fp
+	CHECK(b[6] == 0x19 && b[7] == 0x04 && b[8] == 0x00);                     // push_local 4, 0
+	CHECK(b[9] == 0x1a && b[12] == 0x7d);                                    // -3 as a varint
+	CHECK(b[13] == 0x1c && b[14] == 0x04 && b[15] == 0x40 && b[16] == 0x01); // push_local_shl 4, 1, 1
+	CHECK(b[17] == 0x1f && b[18] == 0xac && b[19] == 0x02);                  // 300 as a varint
+	CHECK(b[20] == 0x2c && b[21] == 0x40);                                   // -64 as a varint (one byte, bit 6 set)
+	CHECK(b[22] == 0x3b && b[23] == 0x03);                                   // jcmp 3, rel16 from its own offset
+	CHECK(b[26] == 0x15 && b[27] == 0x09);                                   // jcc 9, rel16
+	CHECK(b[30] == 0x3c && b[31] == 0xfe);
+	{ // the immediate and relative operands of the compact forms decode back to their values
 		AsmInsn_t in;
-		CHECK(Asm_Decode(b, n, 3, GEN_1_667, &in) && in.op == 0x12 && in.targetKind == 1 && in.target == 31);
-		CHECK(Asm_Decode(b, n, 21, GEN_1_667, &in) && in.op == 0x3b && in.count == 2 && in.target == 31);
-		CHECK(Asm_Decode(b, n, 25, GEN_1_667, &in) && in.op == 0x15 && in.count == 2 && in.target == 31);
-		CHECK(Asm_Decode(b, n, 25, GEN_1_69_444, &in) && in.count == 1 && in.len == 2); // not in an older build: "15" is a plain jcc there
+		CHECK(Asm_Decode(b, n, 3, GEN_1_667, &in) && in.op == 0x12 && in.targetKind == 0 && in.v[0] == 300);
+		CHECK(Asm_Decode(b, n, 22, GEN_1_667, &in) && in.op == 0x3b && in.count == 2 && in.target == 32);
+		CHECK(Asm_Decode(b, n, 26, GEN_1_667, &in) && in.op == 0x15 && in.count == 2 && in.target == 32);
+		CHECK(Asm_Decode(b, n, 26, GEN_1_69_444, &in) && in.count == 1 && in.len == 2); // not in an older build: "15" is a plain jcc there
+	}
+	// 1.685's relative jump has a 16-bit displacement from the opcode's own offset
+	n = Assemble("jmp_rel t\nt:\n", GEN_1_685, b, sizeof b, 0);
+	CHECK(n == 3 && b[0] == 0x13 && b[1] == 3 && b[2] == 0);
+	{
+		AsmInsn_t in;
+		CHECK(Asm_Decode(b, n, 0, GEN_1_685, &in) && in.op == 0x13 && in.targetKind == 1 && in.target == 3);
 	}
 }
 
@@ -353,7 +366,7 @@ static void TestErrors(void)
 	// exist in 1.58)
 	{
 		AsmResult_t r;
-		FILE* log = fopen("/dev/null", "w");
+		FILE* log = fopen(NULL_DEVICE, "w");
 		Asm_Assemble("atan2\n", 5, GEN_1_58, log, &r);
 		fclose(log);
 		CHECK(r.file != NULL && r.warnings == 1 && r.errors == 0);

@@ -6,7 +6,7 @@
  *             (src/core/version.c, src/vm/opset.c)
  *
  * The games run the same engine in different builds (ver 1.58 of 2005 to
- * 1.669 of 2023, see docs/versions.md).  Most differences are additional
+ * 1.685 of 2025, see docs/versions.md).  Most differences are additional
  * opcodes, but a few are parameters of the virtual machine itself that
  * every pointer-handling service depends on: the layout of the tagged
  * script pointers and the size of the thread-local heap.  They are kept
@@ -61,6 +61,7 @@ typedef enum EngineGen
 	GEN_1_662,    // yumahorome
 	GEN_1_667,    // arcana
 	GEN_1_669,    // haruyome
+	GEN_1_685,    // Subarashikihibi15th, 2025 (64-bit executable, 28-bit script pointers)
 	GEN_COUNT
 } EngineGen_t;
 #define GEN_FIRST GEN_1_58
@@ -90,7 +91,7 @@ typedef struct EngineProfile
 	const char* name;   // "1.69/444" etc. (the key for Engine_SelectProfile)
 	EngineGen_t gen;    // the generation: selects the opcode set
 	int compat;         // the script compatibility level x 100: 169, 171, 172
-	int tagShift;       // bits of the offset: 24, 25 or 26
+	int tagShift;       // bits of the offset: 24, 25, 26 or 28
 	uint32_t tagCode;   // tag of the thread's code area
 	uint32_t tagData;   // tag of the thread's data area (locals)
 	uint32_t tagHeap;   // tag of the thread's local heap

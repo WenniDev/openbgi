@@ -426,7 +426,7 @@ static int Opcode_Gfx2_PreloadImage(Thread_t* t)
 {
 	const char* name = (const char*)PopPtr(t);
 	const char* arc = (const char*)PopPtr(t);
-	uint8_t* buf = (uint8_t*)BGI_Alloc(0x2000000);
+	uint8_t* buf = (uint8_t*)BGI_Alloc(LoadFile_BufferSize());
 	uint32_t n = LoadFile(buf, arc, name);
 	int ok = n >= 0x10 && (BGI_IsCbg(buf) || ((const RawImageHeader_t*)buf)->bpp % 8 == 0);
 	BGI_Free(buf);

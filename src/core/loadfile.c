@@ -184,6 +184,13 @@ static uint32_t DecodedLimit(void)
 	return 0x4000000u;     // 64 MB from 1.529
 }
 
+// the size of a buffer LoadFile fills: the largest file the decoded readers accept, at least 32 MB
+uint32_t LoadFile_BufferSize(void)
+{
+	uint32_t limit = DecodedLimit();
+	return limit > 0x2000000u ? limit : 0x2000000u;
+}
+
 // n bytes for a file as stored, with a zeroed tail so that the header tests never read past the data
 static uint8_t* RawAlloc(uint32_t n)
 {

@@ -463,13 +463,18 @@ static uint8_t* ReadMem(void* ctx, const char* path, uint32_t* size)
 	const MemFile_t* f;
 	for(f = (const MemFile_t*)ctx; f->path; f++)
 	{
-		char native[256];
+		char native[256], wanted[256];
 		size_t i;
 		snprintf(native, sizeof native, "%s", f->path);
-		for(i = 0; native[i]; i++)
+		snprintf(wanted, sizeof wanted, "%s", path);
+		for(i = 0; native[i] || wanted[i]; i++)
+		{
 			if(native[i] == '/')
 				native[i] = OS_NATIVE_SEP;
-		if(strcmp(native, path) == 0)
+			if(wanted[i] == '/')
+				wanted[i] = OS_NATIVE_SEP;
+		}
+		if(strcmp(native, wanted) == 0)
 		{
 			size_t n = strlen(f->text);
 			uint8_t* copy = (uint8_t*)malloc(n + 1);
@@ -669,7 +674,11 @@ static void TestRecords(void)
 	{                                                                                                  // the strings: Shift-JIS unless the file or the caller says UTF-8
 		static const char sjis[] = "#engine 1.553\nmain() { sys.yield(\"\xc3\xa5\xe6\x97\xa5\"); }\n"; // "å日": no å in the code page
 		static const char utf8[] = "#engine 1.553\n#encoding utf-8\nmain() { sys.yield(\"\xc3\xa5\xe6\x97\xa5\"); }\n";
+#if defined(_WIN32)
+		static const uint8_t wantSjis[] = {'a', 0x93, 0xfa, 0}, wantUtf8[] = {0xc3, 0xa5, 0xe6, 0x97, 0xa5, 0}; // CP932 maps å to a
+#else
 		static const uint8_t wantSjis[] = {'?', 0x93, 0xfa, 0}, wantUtf8[] = {0xc3, 0xa5, 0xe6, 0x97, 0xa5, 0};
+#endif
 		uint32_t n = 0, i, found;
 		FILE* null = tmpfile();
 		uint8_t* a;

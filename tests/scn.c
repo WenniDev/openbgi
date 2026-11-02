@@ -33,6 +33,12 @@
 
 #include <stdio.h>
 
+#if defined(_WIN32)
+#define NULL_DEVICE "NUL"
+#else
+#define NULL_DEVICE "/dev/null"
+#endif
+
 static int gFails; // the number of failed checks so far
 #define CHECK(c)                                                  \
 	do                                                            \
@@ -74,7 +80,7 @@ static uint8_t* Compile(const char* text, uint32_t* size, int quiet)
 {
 	ScnCompileResult_t r;
 	uint8_t* out;
-	FILE* log = quiet ? fopen("/dev/null", "w") : stderr;
+	FILE* log = quiet ? fopen(NULL_DEVICE, "w") : stderr;
 	Scn_Compile(text, strlen(text), "test", &gCmds, NULL, log, &r);
 	if(quiet)
 		fclose(log);

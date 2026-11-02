@@ -6,8 +6,8 @@
  *            interface in asm.h
  *
  * The operand formats of the base instructions are those of src/vm/
- * ops_base.c (RdU8 / RdU16 / RdU32 after the opcode); the 1.667+
- * superinstructions follow docs/versions.md.  The family instructions
+ * ops_base.c and ops_compact.c (RdU8 / RdU16 / RdU32 and signed LEB128);
+ * the 1.667 / 1.685 compact instructions follow docs/versions.md.  The family instructions
  * (0x80 .. 0xFF) take nothing from the code stream but their second byte.
  *
  * The mnemonic lookups (Asm_OpName, Asm_LookupName) work on the generated
@@ -201,23 +201,54 @@ static const char* Formats(int op, EngineGen_t gen)
 		case 0x0a: return "z";
 		case 0x0b: return "i";
 		case 0x0c: return "zq";
+		case 0x03: return "P";
+		case 0x0d: return "V";
+		case 0x0e: return "LV";
+		case 0x13: return "j";
 		case 0x15: return (gen == GEN_COUNT || gen >= GEN_1_667) ? "k?" : "k";
 		case 0x0f:
 		case 0x19:
 		case 0x1d:
 		case 0x1e: return "L";
-		case 0x12: return "S";
+		case 0x12: return "s";
 		case 0x18: return "w";
 		case 0x1a:
 		case 0x1b: return "Ls";
 		case 0x1c: return "Lb";
-		case 0x1f:
+		case 0x1f: return "V";
 		case 0x2c:
 		case 0x2d:
 		case 0x2e:
 		case 0x2f: return "s";
+		case 0x36: return "ks";
+		case 0x37: return "krs";
 		case 0x3b: return "kr";
 		case 0x3c: return "b";
+		case 0x3e: return "k";
+		case 0x3f: return "ks";
+		case 0xe2:
+		case 0xe3: return "M";
+		case 0xe4:
+		case 0xe5:
+		case 0xe6:
+		case 0xe7: return "LV";
+		case 0xe8: return "L";
+		case 0xe9: return "Lh";
+		case 0xea: return "Lhs";
+		case 0xec: return "s";
+		case 0xed: return "Ls";
+		case 0xee: return "j";
+		case 0xef: return (gen == GEN_COUNT || gen >= GEN_1_685) ? "w" : "";
+		case 0xf0: return "wLs";
+		case 0xf1: return "LLs";
+		case 0xf2: return "LhLs";
+		case 0xf4: return "LwLh";
+		case 0xf5: return "LLhLh";
+		case 0xf7: return "Lhh";
+		case 0xf8: return "wLh";
+		case 0xf9: return "LhLh";
+		case 0xfa: return "wLh";
+		case 0xfb: return "LLh";
 		default: return "";
 	}
 }
@@ -241,6 +272,9 @@ static enum AsmOperandKind KindOfCode(char c)
 		case 's': return ASM_OPD_SLEB;
 		case 'S': return ASM_OPD_SLEBREL;
 		case 'r': return ASM_OPD_REL16;
+		case 'V': return ASM_OPD_TYPED;
+		case 'P': return ASM_OPD_COUNT;   // decoded by the special case of "03"
+		case 'M': return ASM_OPD_LOCAL16; // decoded by the special case of "E2" / "E3"
 		default: return ASM_OPD_NONE;
 	}
 }
@@ -287,8 +321,9 @@ int Asm_Decode(const uint8_t* area, uint32_t size, uint32_t off, EngineGen_t gen
 	out->off = off;
 	out->op = area[p++];
 	// 7F is the nop of the builds up to 1.662 and a family dispatcher from 1.667 on;
-	// under "any" it is read as the one-byte instruction
-	if(out->op >= 0x80 ? Asm_FamilyName(out->op) != NULL : (out->op == 0x7f && gen != GEN_COUNT && gen >= GEN_1_667))
+	// EF is OpenBGI's family before 1.685, but a base call instruction in 1.685
+	int efBase = out->op == 0xef && (gen == GEN_COUNT || gen >= GEN_1_685);
+	if(!efBase && (out->op >= 0x80 ? Asm_FamilyName(out->op) != NULL : (out->op == 0x7f && gen != GEN_COUNT && gen >= GEN_1_667)))
 	{
 		out->fam = out->op;
 		if(p >= size)
@@ -303,8 +338,57 @@ int Asm_Decode(const uint8_t* area, uint32_t size, uint32_t off, EngineGen_t gen
 		out->len = p - off;
 		return 1;
 	}
-	if(out->op >= 0x80 || !Defined(0, out->op, gen))
+	if(!Defined(0, out->op, gen))
 		return 0; // an unknown family byte, or a base opcode the generation lacks
+	if(gen == GEN_COUNT || gen >= GEN_1_685)
+	{
+		if(out->op == 0x03) // push_values: a count of SLEB values, or one fixed-width value
+		{
+			uint32_t control = area[p++], j;
+			out->kinds[out->count] = ASM_OPD_COUNT;
+			out->v[out->count++] = control;
+			if(control < 0x80)
+				for(j = 0; j <= control; j++)
+				{
+					int64_t v;
+					uint32_t n;
+					if(!ReadSleb(area + p, size - p, &v, &n))
+						return 0;
+					p += n;
+					out->kinds[out->count] = ASM_OPD_SLEB;
+					out->v[out->count++] = v;
+				}
+			else if((control & 0x7c) == 0)
+			{
+				uint32_t n = 1u << (control & 3);
+				if(p + n > size)
+					return 0;
+				out->kinds[out->count] = ASM_OPD_BYTES;
+				out->v[out->count] = n;
+				out->bytes = area + p;
+				out->count++;
+				p += n;
+			}
+			out->len = p - off;
+			return 1;
+		}
+		if(out->op == 0xe2 || out->op == 0xe3) // a count, then count + 1 packed locals
+		{
+			uint32_t count = area[p++], j;
+			out->kinds[out->count] = ASM_OPD_COUNT;
+			out->v[out->count++] = count;
+			for(j = 0; j <= count; j++)
+			{
+				if(p + 2 > size)
+					return 0;
+				out->kinds[out->count] = ASM_OPD_LOCAL16;
+				out->v[out->count++] = area[p] | (area[p + 1] << 8);
+				p += 2;
+			}
+			out->len = p - off;
+			return 1;
+		}
+	}
 	fmt = Formats(out->op, gen);
 	for(i = 0; fmt[i]; i++)
 	{
@@ -363,6 +447,13 @@ int Asm_Decode(const uint8_t* area, uint32_t size, uint32_t off, EngineGen_t gen
 			case ASM_OPD_SLEBREL:
 				if(!ReadSleb(area + p, size - p, &v, &n))
 					return 0;
+				need = n;
+				break;
+			case ASM_OPD_TYPED:
+				if(!ReadSleb(area + p, size - p, &v, &n))
+					return 0;
+				out->aux[out->count] = (uint8_t)(v & 3);
+				v >>= 2;
 				need = n;
 				break;
 			default: return 0;
@@ -471,6 +562,7 @@ size_t Asm_Format(const AsmInsn_t* in, EngineGen_t gen, char* buf, size_t n)
 			case ASM_OPD_SIZE:
 			case ASM_OPD_COUNT:
 			case ASM_OPD_COND: PUT("%d", (int)v); break;
+			case ASM_OPD_TYPED: PUT("%lld, %d", (long long)v, (int)in->aux[i]); break; // value, access size
 			case ASM_OPD_BYTES:
 			{
 				int k;
