@@ -88,6 +88,18 @@ EM_JS(void, WasmJs_Present, (const void* rgba, int w, int h, int x, int y), {
 	var ctx = Module.bgiCtx || (Module.bgiCtx = c.getContext('2d', { alpha: false }));
 	var img = new ImageData(new Uint8ClampedArray(HEAPU8.buffer, rgba, w * h * 4), w, h); // a view of the heap, no copy
 	ctx.putImageData(img, x, y);
+	if(Module['onFirstFrame'])
+	{ // the page's loading screen waits for a picture: the first frame with a pixel that is not black
+		var px = img.data, step = Math.max(4, Math.floor(px.length / 4 / 256) * 4);
+		for(var i = 0; i < px.length; i += step)
+			if(px[i] | px[i + 1] | px[i + 2])
+			{
+				var f = Module['onFirstFrame'];
+				Module['onFirstFrame'] = null;
+				f();
+				break;
+			}
+	}
 });
 // clang-format on
 
@@ -167,7 +179,8 @@ EM_JS(void, WasmJs_ClipboardWrite, (const char* utf8), {
  * those of os_wasm.h); the coordinates are scaled from CSS pixels to the
  * canvas's own.  The canvas takes the focus so that it gets the keys; a
  * click or a key also raises Module.onUserGesture, which lets the audio
- * context start (audio.c).  Ctrl / Meta combinations stay with the browser,
+ * context start (audio.c).  Ctrl / Meta combinations stay with the browser
+ * (the modifier keys themselves reach the game: Ctrl is the skip key),
  * Alt combinations become WASM_EV_SYSKEY, a key that types a character also
  * queues a WASM_EV_CHAR. */
 // clang-format off
@@ -177,10 +190,11 @@ EM_JS(void, WasmJs_InstallInput, (void), {
 		return;
 	Module.bgiInputInstalled = true;
 	var push = Module['_openbgi_push_event'];
-	var pos = function(e) { // CSS pixels of the canvas's box to canvas pixels
+	var pos = function(e) { // CSS pixels of the canvas's box to canvas pixels; the picture keeps its aspect (object-fit: contain in full screen)
 		var r = c.getBoundingClientRect();
-		var x = (e.clientX - r.left) * (c.width / (r.width || 1));
-		var y = (e.clientY - r.top) * (c.height / (r.height || 1));
+		var s = Math.min(r.width / (c.width || 1), r.height / (c.height || 1)) || 1;
+		var x = (e.clientX - r.left - (r.width - c.width * s) / 2) / s;
+		var y = (e.clientY - r.top - (r.height - c.height * s) / 2) / s;
 		return [Math.floor(x), Math.floor(y)];
 	};
 	c.tabIndex = 0; // focusable
@@ -216,8 +230,9 @@ EM_JS(void, WasmJs_InstallInput, (void), {
 	c.addEventListener('keydown', function(e) {
 		if(Module['onUserGesture'])
 			Module['onUserGesture']();
-		if(e.ctrlKey || e.metaKey)
-			return; // the browser's own shortcuts stay with the browser
+		var modifier = e.keyCode === 16 || e.keyCode === 17 || e.keyCode === 18 || e.keyCode === 91 || e.keyCode === 93;
+		if((e.ctrlKey || e.metaKey) && !modifier)
+			return;
 		if(e.altKey)
 			push(9, e.keyCode, 0, 0, 0);
 		else
@@ -227,9 +242,7 @@ EM_JS(void, WasmJs_InstallInput, (void), {
 		e.preventDefault();
 	});
 	c.addEventListener('keyup', function(e) {
-		if(e.ctrlKey || e.metaKey)
-			return;
-		push(2, e.keyCode, 0, 0, 0);
+		push(2, e.keyCode, 0, 0, 0); // always: a dropped key-up would leave the key held
 		e.preventDefault();
 	});
 	c.addEventListener('focus', function() { push(6, 1, 0, 0, 0); });

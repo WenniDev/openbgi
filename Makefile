@@ -58,6 +58,7 @@ ifeq ($(PLATFORM),wasm)
              -sEXPORTED_RUNTIME_METHODS=UTF8ToString,stringToUTF8,lengthBytesUTF8,HEAPU8,HEAPU16,HEAP16,HEAPU32,FS,IDBFS \
              -lidbfs.js --pre-js tools/wasm/client.js --shell-file tools/wasm/shell.html
   TARGET  := bin/wasm/openbgi$(EXE)
+  LINK_DEPS := tools/wasm/shell.html tools/wasm/client.js # the page and its pre-js: a change relinks
   # no host libraries: the BW codec 3 (Vorbis) needs the single-file decoder here
   VORBIS  := $(if $(wildcard src/snd/stb_vorbis.c),stb,none)
 else ifeq ($(PLATFORM),wasmsim)
@@ -179,7 +180,7 @@ wasm:
 wasm-sim:
 	$(MAKE) PLATFORM=wasmsim
 
-$(TARGET): $(OBJ) | bin
+$(TARGET): $(OBJ) $(LINK_DEPS) | bin
 	@mkdir -p $(dir $@)
 	$(CC) $(LDFLAGS) -o $@ $(OBJ) $(LDLIBS)
 
